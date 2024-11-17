@@ -2,47 +2,86 @@
 #include <GLFW/glfw3.h>
 #include <iostream>
 
-int main(void)
-{
-    GLFWwindow* window;
+#include "Logger/Logger.h"
 
-    /* Initialize the library */
-    if (!glfwInit())
+int g_windowWidth = 640;
+int g_windowHeight = 480;
+
+void glfwWindowResizeCallback(GLFWwindow* pWindow, int width, int height){
+    g_windowWidth = width;
+    g_windowHeight = height;
+    glViewport(0, 0, g_windowWidth, g_windowHeight);
+}
+
+void glfwKeyCallback(GLFWwindow* pWindow, int key, int scancode, int action, int mode){
+    if(key == GLFW_KEY_ESCAPE && action == GLFW_PRESS){
+        glfwSetWindowShouldClose(pWindow, GL_TRUE);
+    }
+}
+
+int main(void) {
+    auto *logger = new Logger();
+    logger->subscribe({
+                              "ENGINE", 13, 5, 11, true
+                      });
+
+    if (!glfwInit()) {
+        logger->error("glfwInit() failed!");
+        delete logger;
         return -1;
+    }
 
-    /* Create a windowed mode window and its OpenGL context */
-    window = glfwCreateWindow(640, 480, "Hello World", NULL, NULL);
-    if (!window)
-    {
+    logger->print("glfwInit() success");
+
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+    GLFWwindow *pWindow;
+
+    pWindow = glfwCreateWindow(g_windowWidth,
+                               g_windowHeight,
+                               "Hello World",
+                               nullptr,
+                               nullptr);
+    if (!pWindow) {
+        logger->error("glfwCreateWindow(w,h,m,s) failed!");
+
         glfwTerminate();
+        delete logger;
         return -1;
     }
 
-    /* Make the window's context current */
-    glfwMakeContextCurrent(window);
+    logger->print("glfwCreateWindow(w,h,m,s) success");
 
-    if(!gladLoadGL()){
-        std::cerr << "Can't load GLAD!" << std::endl;
+    glfwSetWindowSizeCallback(pWindow, glfwWindowResizeCallback);
+    glfwSetKeyCallback(pWindow, glfwKeyCallback);
+    glfwMakeContextCurrent(pWindow);
+
+    if (!gladLoadGL()) {
+        logger->error("gladLoadGL() failed!");
+
+        delete logger;
         return -1;
     }
+    logger->print("gladLoadGL() success");
 
-    std::cout << "OpenGL " << GLVersion.major << "." << GLVersion.minor << std::endl;
+    logger->print(std::string("Renderer ") + reinterpret_cast<const char*>(glGetString(GL_RENDERER)));
+    logger->print(std::string("OpenGL version ") + reinterpret_cast<const char*>(glGetString(GL_VERSION)));
+    logger->print("OpenGL " + std::to_string(GLVersion.major) + "." + std::to_string(GLVersion.minor));
 
     glClearColor(1, 1, 0, 1);
 
-    /* Loop until the user closes the window */
-    while (!glfwWindowShouldClose(window))
-    {
-        /* Render here */
+    while (!glfwWindowShouldClose(pWindow)) {
+
         glClear(GL_COLOR_BUFFER_BIT);
 
-        /* Swap front and back buffers */
-        glfwSwapBuffers(window);
+        glfwSwapBuffers(pWindow);
 
-        /* Poll for and process events */
         glfwPollEvents();
     }
 
     glfwTerminate();
+    delete logger;
     return 0;
 }
