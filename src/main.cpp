@@ -3,6 +3,10 @@
 #include <iostream>
 
 #include "Logger/Logger.h"
+#include "renderer/ShaderProgram.h"
+#include "resources/ResourceManager.h"
+#include "renderer/texture2D/Texture2D.h"
+
 
 int g_windowWidth = 640;
 int g_windowHeight = 480;
@@ -19,19 +23,35 @@ void glfwKeyCallback(GLFWwindow* pWindow, int key, int scancode, int action, int
     }
 }
 
-int main(void) {
-    auto *logger = new Logger();
-    logger->subscribe({
-                              "ENGINE", 13, 5, 11, true
-                      });
+GLfloat points[] = {
+        .0f, .5f, .0f,
+        .5f, -.5f, .0f,
+        -.5f, -.5f, .0f
+};
+
+GLfloat colors[] = {
+        1.f, .0f, .0f,
+        0.f, 1.f, .0f,
+        .0f, .0f, 1.f,
+};
+
+GLfloat texCords[] = {
+        .5f, 1.f,
+        1.f, .0f,
+        .0f, .0f,
+};
+
+int main(int argc, char** argv) {
+    auto& logger = Logger::getInstance();
+    logger.subscribe(Logger::Subscriber("Engine", 0x5, 0xB, true));
+
 
     if (!glfwInit()) {
-        logger->error("glfwInit() failed!");
-        delete logger;
+        logger.fatal("glfwInit() failed!");
         return -1;
     }
 
-    logger->print("glfwInit() success");
+    logger.success("glfwInit()");
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
@@ -45,43 +65,94 @@ int main(void) {
                                nullptr,
                                nullptr);
     if (!pWindow) {
-        logger->error("glfwCreateWindow(w,h,m,s) failed!");
+        logger.fatal("glfwCreateWindow(w,h,m,s) failed!");
 
         glfwTerminate();
-        delete logger;
         return -1;
     }
 
-    logger->print("glfwCreateWindow(w,h,m,s) success");
+    logger.success("glfwCreateWindow(w,h,m,s)");
 
     glfwSetWindowSizeCallback(pWindow, glfwWindowResizeCallback);
     glfwSetKeyCallback(pWindow, glfwKeyCallback);
     glfwMakeContextCurrent(pWindow);
 
     if (!gladLoadGL()) {
-        logger->error("gladLoadGL() failed!");
-
-        delete logger;
+        logger.fatal("gladLoadGL() failed!");
         return -1;
     }
-    logger->print("gladLoadGL() success");
 
-    logger->print(std::string("Renderer ") + reinterpret_cast<const char*>(glGetString(GL_RENDERER)));
-    logger->print(std::string("OpenGL version ") + reinterpret_cast<const char*>(glGetString(GL_VERSION)));
-    logger->print("OpenGL " + std::to_string(GLVersion.major) + "." + std::to_string(GLVersion.minor));
+    logger.success("gladLoadGL()");
+    logger.info(std::string("Renderer ") + reinterpret_cast<const char*>(glGetString(GL_RENDERER)));
+    logger.message(std::string("OpenGL version ") + reinterpret_cast<const char*>(glGetString(GL_VERSION)));
+    logger.message("OpenGL " + std::to_string(GLVersion.major) + "." + std::to_string(GLVersion.minor));
 
     glClearColor(1, 1, 0, 1);
 
-    while (!glfwWindowShouldClose(pWindow)) {
+    {
+        ResourceManager resourceManager(argv[0]);
+        auto pDefaultShaderProgram = resourceManager.loadShaders("DefaultShader",
+                                                                 "res/shaders/vertex.txt",
+                                                                 "res/shaders/fragment.txt");
 
-        glClear(GL_COLOR_BUFFER_BIT);
+        if(!pDefaultShaderProgram){
+            logger.fatal("Can't create shader program DefaultShader");
+            return -1;
+        }
 
-        glfwSwapBuffers(pWindow);
+        auto texture = resourceManager.loadTexture("DefaultTexture", "res/textures/map_16x16.png");
 
-        glfwPollEvents();
+        logger.info("Created shader program DefaultShader");
+
+        GLuint points_vbo = 0;
+        glGenBuffers(1, &points_vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, points_vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(points), points, GL_STATIC_DRAW);
+
+        GLuint colors_vbo = 0;
+        glGenBuffers(1, &colors_vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, colors_vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(colors), colors, GL_STATIC_DRAW);
+
+        GLuint texCords_vbo = 0;
+        glGenBuffers(1, &texCords_vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, texCords_vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(texCords), texCords, GL_STATIC_DRAW);
+
+        GLuint vao = 0;
+        glGenVertexArrays(1, &vao);
+        glBindVertexArray(vao);
+
+        glEnableVertexAttribArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, points_vbo);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+
+        glEnableVertexAttribArray(1);
+        glBindBuffer(GL_ARRAY_BUFFER, colors_vbo);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+
+        glEnableVertexAttribArray(2);
+        glBindBuffer(GL_ARRAY_BUFFER, texCords_vbo);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+
+        pDefaultShaderProgram->use();
+        pDefaultShaderProgram->setInt("tex", 0);
+
+        while (!glfwWindowShouldClose(pWindow)) {
+
+            glClear(GL_COLOR_BUFFER_BIT);
+
+            pDefaultShaderProgram->use();
+            glBindVertexArray(vao);
+            texture->bind();
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+
+            glfwSwapBuffers(pWindow);
+
+            glfwPollEvents();
+        }
     }
 
     glfwTerminate();
-    delete logger;
     return 0;
 }
